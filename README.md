@@ -1,5 +1,9 @@
 # Blunder build prerequisites
 
+Blunder is a CPU ray tracer. Its camera, lights, shadows, and geometric
+intersections are implemented in this project and `geom3`; SDL3 remains
+responsible for displaying the rendered pixel buffer.
+
 Blunder is built with GNU C++ (C++20) and GNU Make. The Makefile also uses
 `ar`, which is included with the GNU C++ toolchain.
 
@@ -85,8 +89,15 @@ from this directory:
 ./build/release/Blunder.exe
 ```
 
-The app opens a resizable SDL3 window with a small 2D rendering demo. Press
-Escape or close the window to exit.
+The app renders the default scene in a resizable SDL3 window. Press **D** to
+rerender the pixel under the mouse, or press **Escape** or close the window to
+exit. The HUD displays the frame rate and logical pixel coordinates.
+
+Run the ray-tracing smoke tests with:
+
+```sh
+make test
+```
 
 
 ```sh

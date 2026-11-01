@@ -49,8 +49,10 @@ endif
 
 LIBRARY := ../geom3/build/$(CONFIG)/libgeom3.a
 OBJECTS := $(patsubst src/%.cpp,$(BUILD_DIR)/%.o,$(SOURCES))
+TEST_OBJECT := $(BUILD_DIR)/tests/test.o
+TEST_TARGET := $(BUILD_DIR)/blunder_tests.exe
 
-.PHONY: all clean debug _build check-sdl
+.PHONY: all clean debug test _build _test check-sdl
 
 # Build the application with the requested parallelism.
 all:
@@ -58,6 +60,13 @@ all:
 
 # Internal target that performs the actual build after any recursive Make setup.
 _build: $(APP_TARGET)
+
+# Build and run the ray-tracing smoke tests.
+test:
+	$(MAKE) -j$(JOBS) _test
+
+_test: $(TEST_TARGET)
+	$(TEST_TARGET)
 
 # Fail with an actionable message when SDL3 development files are unavailable.
 check-sdl:
@@ -75,6 +84,14 @@ $(APP_TARGET): $(OBJECTS) $(LIBRARY) | check-sdl
 $(BUILD_DIR)/%.o: src/%.cpp $(HEADERS) | check-sdl
 	$(MKDIR)
 	$(CXX) $(CPPFLAGS) $(SDL_CFLAGS) $(CXXFLAGS) -c $< -o $@
+
+# Compile a standalone test runner against the same ray-tracing and geometry objects.
+$(TEST_OBJECT): tests/test.cpp $(HEADERS) | check-sdl
+	$(MKDIR)
+	$(CXX) $(CPPFLAGS) $(SDL_CFLAGS) $(CXXFLAGS) -c $< -o $@
+
+$(TEST_TARGET): $(TEST_OBJECT) $(filter-out $(BUILD_DIR)/app.o $(BUILD_DIR)/mini_font.o,$(OBJECTS)) $(LIBRARY)
+	$(CXX) $(CXXFLAGS) $(TEST_OBJECT) $(filter-out $(BUILD_DIR)/app.o $(BUILD_DIR)/mini_font.o,$(OBJECTS)) $(LIBRARY) -o $@
 
 # Convenience target for a debug build.
 debug:
