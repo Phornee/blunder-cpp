@@ -1,0 +1,24 @@
+{
+    "configurations": [
+        {
+            "name": "Blunder (MSYS2 UCRT64)",
+            "includePath": [
+                "${workspaceFolder}/include",
+                "${workspaceFolder}/../geom3/include",
+                "C:/msys64/ucrt64/include"
+            ],
+            "defines": [],
+            "compilerPath": "C:/msys64/ucrt64/bin/g++.exe",
+            "cppStandard": "c++20",
+            "intelliSenseMode": "windows-gcc-x64",
+            "browse": {
+                "path": [
+                    "${workspaceFolder}/include",
+                    "${workspaceFolder}/../geom3/include",
+                    "C:/msys64/ucrt64/include"
+                ]
+            }
+        }
+    ],
+    "version": 4
+}
