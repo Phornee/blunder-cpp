@@ -20,26 +20,26 @@ Scene::Scene()
 
     lights.push_back(std::make_unique<AmbientLight>("Omnilight", Color{0.0, 0.0, 0.2}));
     lights.push_back(std::make_unique<PointLight>(
-        "Whitelight",
+        "WhiteLight",
         Color{1.0, 1.0, 1.0},
         Vector3{-3.5, 0.0, 2.0}));
     lights.push_back(std::make_unique<PointLight>(
-        "Red light",
+        "RedLight",
         Color{1.0, 0.5, 0.5},
         Vector3{3.5, 4.0, -2.0}));
 
-    objects.emplace_back(
-        "Red sphere",
+    objects.push_back(std::make_unique<Raytraceable>(
+        "RedSphere",
         red_mat,
-        std::make_unique<Sphere>(Vector3{0.0, 0.0, -5.0}, 3.0));
-    objects.emplace_back(
-        "Blue sphere",
+        std::make_unique<Sphere>(Vector3{0.0, 0.0, -5.0}, 3.0)));
+    objects.push_back(std::make_unique<Raytraceable>(
+        "BlueSphere",
         blue_mat,
-        std::make_unique<Sphere>(Vector3{3.0, 2.0, 0.0}, 0.5));
-    objects.emplace_back(
+        std::make_unique<Sphere>(Vector3{3.0, 2.0, 0.0}, 0.5)));
+    objects.push_back(std::make_unique<Raytraceable>(
         "Floor",
         white_mat,
-        std::make_unique<Plane>(Vector3{0.0, -3.0, 0.0}, Vector3{0.0, 1.0, 0.0}));
+        std::make_unique<Plane>(Vector3{0.0, -3.0, 0.0}, Vector3{0.0, 1.0, 0.0})));
 }
 
 Material& Scene::add_material(std::string name, Color color, double reflectivity)

@@ -25,8 +25,9 @@ int main()
     assert(shared_material.name() == "Material");
 
     const Scene scene;
-    assert(&scene.objects[0].material() == scene.materials()[0].get());
+    assert(&scene.objects[0]->material() == scene.materials()[0].get());
     assert(scene.lights[0]->name() == "Omnilight");
+    assert(scene.camera.camera_coords_to_world(Vector2{}) == scene.camera.sensor_center());
 
     Scene named_materials_scene;
     const std::size_t material_count = named_materials_scene.materials().size();

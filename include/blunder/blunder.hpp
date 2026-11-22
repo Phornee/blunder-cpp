@@ -12,13 +12,14 @@ class Scene;
 class Light;
 class Raytraceable;
 class Vector3;
+class Vector2;
 class Line3;
 
 /// Owns the state and pixel data for the Blunder application.
 class Blunder{
 public:
-    static constexpr int PixelWidth = 400;
-    static constexpr int PixelHeight = 300;
+    static constexpr int PixelWidth = 800;
+    static constexpr int PixelHeight = 600;
     using PixelGrid = std::array<std::array<SDL_Color, PixelWidth>, PixelHeight>;
 
     /// Creates a Blunder instance with the default ray-tracing scene.
@@ -42,7 +43,9 @@ private:
         const Vector3& hit_point,
         const Vector3& normal) const;
 
-    Color               get_incomming_light(const Scene& scene, const Line3& ray, int depth = 0);
+    Vector2             screen_coords_to_camera(int x, int y) const;
+    Color               get_incomming_light(const Scene& scene, const Line3& ray);
+    Color               trace_ray(const Scene& scene, const Line3& ray, int depth);
 
     std::unique_ptr<Scene>  scene_;
     PixelGrid               pixels_{};

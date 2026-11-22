@@ -23,6 +23,6 @@ private:
     std::vector<std::unique_ptr<Material>> materials_;
 
 public:
-    std::vector<Raytraceable> objects;
+    std::vector<std::unique_ptr<Raytraceable>> objects;
     std::vector<std::unique_ptr<Light>> lights;
 };

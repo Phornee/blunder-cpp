@@ -28,6 +28,13 @@ const Vector3& Camera::sensor_v() const
     return sensor_v_;
 }
 
+Vector3 Camera::camera_coords_to_world(const Vector2& camera_coords) const
+{
+    return sensor_center_
+        + sensor_u_ * (camera_coords.x * sensor_size.x)
+        + sensor_v_ * (camera_coords.y * sensor_size.y);
+}
+
 const Vector3& Camera::view_direction() const
 {
     return view_direction_;

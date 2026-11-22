@@ -10,6 +10,8 @@ public:
     Vector3             sensor_center() const;
     const Vector3&      sensor_u() const;
     const Vector3&      sensor_v() const;
+    /// Converts centered, normalized sensor coordinates to a world-space point.
+    Vector3             camera_coords_to_world(const Vector2& camera_coords) const;
     const Vector3&      view_direction() const;
     void                set_view_direction(const Vector3& view_direction);
 
