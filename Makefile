@@ -10,15 +10,15 @@ JOBS ?= 4
 # Recursively find matching files in this project and its nested directories.
 rwildcard = $(wildcard $(1)$(2)) $(foreach dir,$(wildcard $(1)*),$(if $(wildcard $(dir)/.),$(call rwildcard,$(dir)/,$(2))))
 
-SOURCES := $(wildcard src/*.cpp)
+SOURCES := $(call rwildcard,src/,*.cpp)
 HEADERS := $(call rwildcard,include/,*.hpp) $(call rwildcard,../geom3/include/,*.hpp)
 GEOM_SOURCES := $(call rwildcard,../geom3/src/,*.cpp)
 GEOM_HEADERS := $(call rwildcard,../geom3/include/,*.hpp)
 
 # Include Blunder's and geom3's public include roots.
 CPPFLAGS := -I$(CURDIR)/include -I$(abspath ../geom3/include)
-SDL_CFLAGS = $(shell $(PKG_CONFIG) --cflags sdl3)
-SDL_LIBS = $(shell $(PKG_CONFIG) --libs sdl3)
+SDL_CFLAGS = $(shell $(PKG_CONFIG) --cflags sdl3 sdl3-image)
+SDL_LIBS = $(shell $(PKG_CONFIG) --libs sdl3 sdl3-image)
 
 .DEFAULT_GOAL := all
 
@@ -70,7 +70,7 @@ _test: $(TEST_TARGET)
 
 # Fail with an actionable message when SDL3 development files are unavailable.
 check-sdl:
-	@$(PKG_CONFIG) --exists sdl3 || (echo "SDL3 development files were not found. Install SDL3 and pkg-config, then retry." && exit 1)
+	@$(PKG_CONFIG) --exists sdl3 sdl3-image || (echo "SDL3 and SDL3_image development files were not found. Install them and pkg-config, then retry." && exit 1)
 
 # Build geom3 first when its sources or headers have changed.
 $(LIBRARY): $(GEOM_SOURCES) $(GEOM_HEADERS)
@@ -91,7 +91,7 @@ $(TEST_OBJECT): tests/test.cpp $(HEADERS) | check-sdl
 	$(CXX) $(CPPFLAGS) $(SDL_CFLAGS) $(CXXFLAGS) -c $< -o $@
 
 $(TEST_TARGET): $(TEST_OBJECT) $(filter-out $(BUILD_DIR)/app.o $(BUILD_DIR)/mini_font.o,$(OBJECTS)) $(LIBRARY)
-	$(CXX) $(CXXFLAGS) $(TEST_OBJECT) $(filter-out $(BUILD_DIR)/app.o $(BUILD_DIR)/mini_font.o,$(OBJECTS)) $(LIBRARY) -o $@
+	$(CXX) $(CXXFLAGS) $(TEST_OBJECT) $(filter-out $(BUILD_DIR)/app.o $(BUILD_DIR)/mini_font.o,$(OBJECTS)) $(LIBRARY) $(SDL_LIBS) -o $@
 
 # Convenience target for a debug build.
 debug:

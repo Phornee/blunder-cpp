@@ -9,7 +9,7 @@ class MiniFont
 {
 public:
     /// Draws text at the specified position and scale.
-    /// Unsupported characters render as blank glyphs.
+    /// ASCII letters are rendered uppercase; unsupported characters render blank.
     /// @param renderer SDL renderer used to draw the text.
     /// @param text Characters to draw.
     /// @param x Left coordinate of the first glyph.

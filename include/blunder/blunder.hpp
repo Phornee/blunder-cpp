@@ -2,15 +2,16 @@
 
 #include <array>
 #include <memory>
+#include <optional>
 #include <random>
 
 #include <SDL3/SDL.h>
 
 #include <blunder/color.hpp>
+#include <blunder/scene.hpp>
 
-class Scene;
 class Light;
-class Raytraceable;
+class Object;
 class Vector3;
 class Vector2;
 class Line3;
@@ -32,13 +33,17 @@ public:
     /// Renders one pixel in window coordinates.
     void                RenderPixel(int x, int y);
 
+    /// Returns the closest hit along the center ray for a pixel.
+    /// @return The nearest scene hit, or std::nullopt if the ray misses.
+    std::optional<Scene::Hit> get_hit_info(int x, int y) const;
+
     /// Provides read-only access to the rendered pixel grid.
     /// @return The fixed-size RGBA pixel grid owned by this instance.
     const PixelGrid&    GetPixelGrid() const;
 
 private:
     Color light_contribution(
-        const Raytraceable& object,
+        const Color& surface_color,
         const Light& light,
         const Vector3& hit_point,
         const Vector3& normal) const;

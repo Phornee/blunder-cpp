@@ -7,7 +7,7 @@
 #include <SDL3/SDL.h>
 
 #include <blunder/blunder.hpp>
-#include <mini_font/mini_font.hpp>
+#include <blunder/mini_font.hpp>
 #include "geom3/geom3.hpp"
 
 namespace
@@ -22,15 +22,18 @@ bool DrawFpsHud(
     int fps,
     int mouseX,
     int mouseY,
+    const std::string& objectName,
     const MiniFont& miniFont)
 {
     constexpr int scale = 1;
     constexpr int padding = 8;
     const std::string fpsText = "FPS: " + std::to_string(fps);
     const std::string mouseText = "(" + std::to_string(mouseX) + ", " + std::to_string(mouseY) + ")";
-    const int textWidth = std::max(
+    const std::string objectText = !objectName.empty() ? "Object: " + objectName : "";
+    const int textWidth = std::max({
         static_cast<int>(fpsText.size()),
-        static_cast<int>(mouseText.size())) * 6 - 1;
+        static_cast<int>(mouseText.size()),
+        static_cast<int>(objectText.size())}) * 6 - 1;
     const SDL_FRect background = {
         static_cast<float>(::Blunder::PixelWidth - textWidth - 2 * padding - 12),
         12.0F,
@@ -55,6 +58,13 @@ bool DrawFpsHud(
             mouseText,
             static_cast<int>(background.x) + padding,
             static_cast<int>(background.y) + padding + 8,
+            scale,
+            {255, 255, 255, 255}) &&
+        miniFont.DrawText(
+            renderer,
+            objectText,
+            static_cast<int>(background.x) + padding,
+            static_cast<int>(background.y) + padding + 16,
             scale,
             {255, 255, 255, 255});
 }
@@ -88,7 +98,8 @@ bool RenderFrame(
     const MiniFont& miniFont,
     int fps,
     int mouseX,
-    int mouseY)
+    int mouseY,
+    std::string objectName = "")
 {
     const Blunder::PixelGrid& pixels = blunder.GetPixelGrid();
 
@@ -99,7 +110,7 @@ bool RenderFrame(
             static_cast<int>(sizeof(pixels[0]))) &&
         SDL_RenderClear(renderer) &&
         SDL_RenderTexture(renderer, pixelTexture, nullptr, nullptr) &&
-        DrawFpsHud(renderer, fps, mouseX, mouseY, miniFont) &&
+        DrawFpsHud(renderer, fps, mouseX, mouseY, objectName, miniFont) &&
         SDL_RenderPresent(renderer);
 }
 }
@@ -191,6 +202,14 @@ int main()
     SDL_Event event;
     while (running)
     {
+        int mouseX = 0;
+        int mouseY = 0;
+        if (!GetMousePixel(renderer, mouseX, mouseY))
+        {
+            std::cerr << "SDL_RenderCoordinatesFromWindow failed: " << SDL_GetError() << '\n';
+            exitCode = 1;
+            break;
+        }
         while (SDL_PollEvent(&event))
         {
             if (event.type == SDL_EVENT_QUIT ||
@@ -200,15 +219,6 @@ int main()
             }
             else if (event.type == SDL_EVENT_KEY_DOWN && event.key.key == SDLK_D)
             {
-                int mouseX = 0;
-                int mouseY = 0;
-                if (!GetMousePixel(renderer, mouseX, mouseY))
-                {
-                    std::cerr << "SDL_RenderCoordinatesFromWindow failed: " << SDL_GetError() << '\n';
-                    exitCode = 1;
-                    running = false;
-                    break;
-                }
                 blunder.RenderPixel(mouseX, mouseY);
             }
         }
@@ -218,16 +228,8 @@ int main()
             break;
         }
 
-        int mouseX = 0;
-        int mouseY = 0;
-        if (!GetMousePixel(renderer, mouseX, mouseY))
-        {
-            std::cerr << "SDL_RenderCoordinatesFromWindow failed: " << SDL_GetError() << '\n';
-            exitCode = 1;
-            break;
-        }
-
-        if (!RenderFrame(renderer, pixelTexture, blunder, miniFont, displayedFps, mouseX, mouseY))
+        const auto hit_info = blunder.get_hit_info(mouseX, mouseY);
+        if (!RenderFrame(renderer, pixelTexture, blunder, miniFont, displayedFps, mouseX, mouseY, hit_info ? hit_info->object->name() : ""))
         {
             std::cerr << "SDL rendering failed: " << SDL_GetError() << '\n';
             exitCode = 1;

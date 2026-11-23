@@ -1,8 +1,8 @@
 # Blunder build prerequisites
 
 Blunder is a CPU ray tracer. Its camera, lights, shadows, and geometric
-intersections are implemented in this project and `geom3`; SDL3 remains
-responsible for displaying the rendered pixel buffer.
+intersections are implemented in this project and `geom3`; SDL3 displays the
+rendered pixel buffer, and SDL3_image loads PNG and JPEG textures.
 
 Blunder is built with GNU C++ (C++20) and GNU Make. The Makefile also uses
 `ar`, which is included with the GNU C++ toolchain.
@@ -36,21 +36,21 @@ Blunder is built with GNU C++ (C++20) and GNU Make. The Makefile also uses
 Use the MSYS2 UCRT64 terminal for building so the compiler and Make are on
 `PATH`.
 
-Install SDL3 and `pkg-config` from the same terminal:
+Install SDL3, SDL3_image, and `pkg-config` from the same terminal:
 
 ```sh
-pacman -S --needed mingw-w64-ucrt-x86_64-sdl3 mingw-w64-ucrt-x86_64-pkgconf
+pacman -S --needed mingw-w64-ucrt-x86_64-sdl3 mingw-w64-ucrt-x86_64-sdl3-image mingw-w64-ucrt-x86_64-pkgconf
 ```
 
 ### Debian or Ubuntu
 
-Install the GNU compiler, Make, SDL3 development files, and `pkg-config` with
+Install the GNU compiler, Make, SDL3 and SDL3_image development files, and `pkg-config` with
 the distribution's package manager (the SDL3 package may depend on the
 distribution release):
 
 ```sh
 sudo apt update
-sudo apt install build-essential gdb pkg-config libsdl3-dev
+sudo apt install build-essential gdb pkg-config libsdl3-dev libsdl3-image-dev
 ```
 
 `build-essential` includes `g++`, `make`, and the required archiver.
@@ -58,11 +58,11 @@ sudo apt install build-essential gdb pkg-config libsdl3-dev
 ### macOS
 
 Install Apple's command-line developer tools, which provide a C++ compiler and
-Make, and SDL3 with Homebrew:
+Make, SDL3, and SDL3_image with Homebrew:
 
 ```sh
 xcode-select --install
-brew install sdl3 pkg-config
+brew install sdl3 sdl3_image pkg-config
 ```
 
 The `g++` command provided by Apple's tools is an alias for Clang.
@@ -82,14 +82,16 @@ debug build, run `make debug`.
 
 ## Run Blunder
 
-With SDL3 and `pkg-config` installed and available on `PATH`, launch the app
+With SDL3, SDL3_image, and `pkg-config` installed and available on `PATH`, launch the app
 from this directory:
 
 ```sh
 ./build/release/Blunder.exe
 ```
 
-The app renders the default scene in a resizable SDL3 window. Press **D** to
+The app renders the default scene, including the repeating PNG floor texture in
+`assets/floor.png`, in a resizable SDL3 window. Run it from this directory so
+the texture path resolves. Press **D** to
 rerender the pixel under the mouse, or press **Escape** or close the window to
 exit. The HUD displays the frame rate and logical pixel coordinates.
 

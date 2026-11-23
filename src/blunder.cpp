@@ -3,7 +3,6 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
-#include <limits>
 #include <optional>
 #include <random>
 #include <stdexcept>
@@ -14,36 +13,18 @@
 
 namespace
 {
-    constexpr int SamplesPerPixel = 100;
+    constexpr int SamplesPerPixel = 50;
     constexpr double RayDirectionStandardDeviation = 0.001;
     constexpr int DepthLimit = 10;
 
-    struct Hit
-    {
-        double lambda;
-        const Raytraceable *object;
-    };
-
-    std::optional<Hit> closest_hit(const Scene &scene, const Line3 &ray)
-    {
-        std::optional<Hit> closest;
-        double closest_lambda = std::numeric_limits<double>::max();
-        for (const std::unique_ptr<Raytraceable> &object : scene.objects)
-        {
-            const std::optional<double> intersection = object->closest_intersection(ray);
-            if (intersection && *intersection > 0.0 && *intersection < closest_lambda)
-            {
-                closest_lambda = *intersection;
-                closest = Hit{*intersection, object.get()};
-            }
-        }
-        return closest;
-    }
+    // constexpr int SamplesPerPixel = 1; // 50
+    // constexpr double RayDirectionStandardDeviation = 0; // 0.001
+    // constexpr int DepthLimit = 1; // 10
 
     double shadow_attenuation(const Scene &scene, const Line3 &ray)
     {
         // TODO: This is a very naive shadow attenuation implementation. It should be improved to support multiple light sources and partial occlusion.
-        for (const std::unique_ptr<Raytraceable> &object : scene.objects)
+        for (const std::unique_ptr<Object> &object : scene.objects)
         {
             const std::optional<double> intersection = object->closest_intersection(ray);
             if (intersection && *intersection > 0.0 && *intersection < 1.0 &&
@@ -71,7 +52,7 @@ Blunder::Blunder()
 Blunder::~Blunder() = default;
 
 Color Blunder::light_contribution(
-    const Raytraceable &object,
+    const Color &surface_color,
     const Light &light,
     const Vector3 &hit_point,
     const Vector3 &normal) const
@@ -91,7 +72,7 @@ Color Blunder::light_contribution(
     }
 
     Color contribution =
-        object.color() * light.color() * (intensity * (1.0 - shadow_factor));
+        surface_color * light.color() * (intensity * (1.0 - shadow_factor));
     if (light.is_specular())
     {
         const Vector3 incoming = -1.0 * light.direction_to_light(hit_point);
@@ -144,7 +125,7 @@ Color Blunder::get_incomming_light(const Scene &scene, const Line3 &ray)
 
 Color Blunder::trace_ray(const Scene &scene, const Line3 &ray, int depth)
 {
-    const std::optional<Hit> hit = closest_hit(scene, ray);
+    const std::optional<Scene::Hit> hit = scene.closest_hit(ray);
     if (!hit)
     {
         return Color{};
@@ -152,11 +133,12 @@ Color Blunder::trace_ray(const Scene &scene, const Line3 &ray, int depth)
 
     const Vector3 hit_point = ray.calc_point(hit->lambda);
     const Vector3 normal = hit->object->normal(hit_point);
+    const Color surface_color = hit->object->color_at(hit_point);
     Color sample_color;
     for (const std::unique_ptr<Light> &light : scene.lights)
     {
         sample_color =
-            sample_color + this->light_contribution(*hit->object, *light, hit_point, normal);
+            sample_color + this->light_contribution(surface_color, *light, hit_point, normal);
     }
 
     // Trivial case of recursion: stop bouncing rays after a certain depth to avoid infinite recursion and excessive computation.
@@ -181,6 +163,20 @@ Vector2 Blunder::screen_coords_to_camera(int x, int y) const
     return {
         pixel_center.x / PixelWidth - 0.5,
         pixel_center.y / PixelHeight - 0.5};
+}
+
+std::optional<Scene::Hit> Blunder::get_hit_info(int x, int y) const
+{
+    if (x < 0 || x >= PixelWidth || y < 0 || y >= PixelHeight)
+    {
+        throw std::out_of_range("Pixel coordinates are outside the render grid");
+    }
+
+    const Camera& camera = scene_->camera;
+    const Vector2 camera_coords = screen_coords_to_camera(x, PixelHeight - y - 1);
+    const Vector3 pixel_position = camera.camera_coords_to_world(camera_coords);
+    const Line3 ray{camera.position, pixel_position};
+    return scene_->closest_hit(ray);
 }
 
 void Blunder::RenderPixel(int x, int y)
