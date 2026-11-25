@@ -9,6 +9,7 @@
 #include <blunder/blunder.hpp>
 #include <blunder/mini_font.hpp>
 #include "geom3/geom3.hpp"
+#include <blunder/utils/scoped_log_timer.hpp>
 
 namespace
 {
@@ -185,14 +186,11 @@ int main()
         return 1;
     }
 
-    std::uint64_t totalRenderMilliseconds = 0;
-    unsigned int renderedImages = 0;
-    const auto renderStart = std::chrono::steady_clock::now();
-    blunder.RenderImage();
-    totalRenderMilliseconds += static_cast<std::uint64_t>(
-        std::chrono::duration_cast<std::chrono::milliseconds>(
-            std::chrono::steady_clock::now() - renderStart).count());
-    ++renderedImages;
+
+    {
+        const ScopedLogTimer timer("RenderImage");
+        blunder.RenderImage();
+    }
 
     bool running = true;
     int exitCode = 0;
@@ -253,10 +251,5 @@ int main()
     SDL_DestroyWindow(window);
     SDL_Quit();
 
-    if (renderedImages > 0)
-    {
-        std::cout << "Average render time: "
-                  << totalRenderMilliseconds / renderedImages << " ms\n";
-    }
     return exitCode;
 }

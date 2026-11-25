@@ -44,7 +44,7 @@ public:
         return reflectivity_;
     }
 
-    Color color_at(const Vector2& coordinates) const
+    Color albedo_at(const Vector2& coordinates) const
     {
         return color_texture_ ? color_texture_->sample(coordinates) * color_ : color_;
     }

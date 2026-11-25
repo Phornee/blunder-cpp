@@ -15,6 +15,8 @@ SphereObject::SphereObject(
           std::make_unique<Sphere>(Vector3(0, 0, 0), radius))
 {
     transform_ = Matrix4::translation(center);
+    transformed_shape_ = std::make_unique<Sphere>(center, radius);
+    bounding_box_ = std::nullopt;
 }
 
 void SphereObject::transform_shape() const
@@ -23,17 +25,12 @@ void SphereObject::transform_shape() const
     Vector3 transformed_center = transform_ * sphere->c;
     double transformed_radius = sphere->r * transform_.scaling_factor();
 
-    if (transformed_shape_ == nullptr) {
-        transformed_shape_ = std::make_unique<Sphere>(transformed_center, transformed_radius);
-    }
-    else
-    {
-        static_cast<Sphere*>(transformed_shape_.get())->c = transformed_center;
-        static_cast<Sphere*>(transformed_shape_.get())->r = transformed_radius;
-    }
+    static_cast<Sphere*>(transformed_shape_.get())->c = transformed_center;
+    static_cast<Sphere*>(transformed_shape_.get())->r = transformed_radius;
+    const Vector3 extent{transformed_radius, transformed_radius, transformed_radius};
 }
 
-Color SphereObject::color_at(const Vector3&) const
+Color SphereObject::albedo_at(const Vector3&) const
 {
     return material_.get().color();
 }

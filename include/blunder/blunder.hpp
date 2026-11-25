@@ -3,7 +3,6 @@
 #include <array>
 #include <memory>
 #include <optional>
-#include <random>
 
 #include <SDL3/SDL.h>
 
@@ -35,7 +34,7 @@ public:
 
     /// Returns the closest hit along the center ray for a pixel.
     /// @return The nearest scene hit, or std::nullopt if the ray misses.
-    std::optional<Scene::Hit> get_hit_info(int x, int y) const;
+    std::optional<Hit> get_hit_info(int x, int y) const;
 
     /// Provides read-only access to the rendered pixel grid.
     /// @return The fixed-size RGBA pixel grid owned by this instance.
@@ -54,5 +53,4 @@ private:
 
     std::unique_ptr<Scene>  scene_;
     PixelGrid               pixels_{};
-    std::mt19937            random_engine_;
 };

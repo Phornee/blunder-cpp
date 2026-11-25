@@ -14,11 +14,7 @@
 class Scene
 {
 public:
-    struct Hit
-    {
-        double lambda;
-        const Object* object;
-    };
+    using Hit = ::Hit;
 
     Scene();
 
@@ -29,6 +25,7 @@ public:
         std::unique_ptr<Texture> texture = nullptr);
     const std::vector<std::unique_ptr<Material>>&   materials() const;
     std::optional<Hit> closest_hit(const Line3& ray) const;
+    void transform_objects();
 
     Camera camera;
 

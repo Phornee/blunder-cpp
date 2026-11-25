@@ -15,7 +15,7 @@ public:
         const Vector2& uv_b = Vector2{1.0, 0.0},
         const Vector2& uv_c = Vector2{0.5, 1.0}
     );
-    Color color_at(const Vector3& point) const override;
+    Color albedo_at(const Vector3& point) const override;
     virtual void            transform_shape() const override;
 private:
     Vector2 a_uv_;

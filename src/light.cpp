@@ -21,7 +21,7 @@ const std::string& Light::name() const
 {
     return name_;
 }
-
+///////////////////////////////////////////////////////////////////////////////////////////////////
 DirectionalLight::DirectionalLight(std::string name, Color color, Vector3 direction)
     : Light(std::move(name), color), direction_(direction.normalized())
 {
@@ -46,7 +46,7 @@ bool DirectionalLight::is_specular() const
 {
     return true;
 }
-
+///////////////////////////////////////////////////////////////////////////////////////////////////
 PointLight::PointLight(std::string name, Color color, Vector3 position)
     : Light(std::move(name), color), position_(position)
 {
@@ -73,7 +73,7 @@ bool PointLight::is_specular() const
 {
     return true;
 }
-
+///////////////////////////////////////////////////////////////////////////////////////////////////
 AmbientLight::AmbientLight(std::string name, Color color)
     : Light(std::move(name), color)
 {

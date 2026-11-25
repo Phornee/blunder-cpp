@@ -10,6 +10,6 @@ public:
         const Material& material,
         const Vector3& point,
         const Vector3& normal);
-    Color color_at(const Vector3& point) const override;
+    Color albedo_at(const Vector3& point) const override;
     virtual void            transform_shape() const override;
 };

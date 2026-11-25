@@ -21,35 +21,44 @@ const Material& Object::material() const
     return material_.get();
 }
 
-const Color& Object::color() const
-{
-    return material_.get().color();
-}
+// const Color& Object::color() const
+// {
+//     return material_.get().color();
+// }
 
-const Shape* Object::transformed_shape() const 
-{ 
-    if (transformed_shape_ == nullptr) {
-        transform_shape();
-    }
-    return transformed_shape_.get();
-}
-
-Color Object::color_at(const Vector3& point) const
+Color Object::albedo_at(const Vector3& point) const
 {
     return Color(1.0, 0.0, 1.0);
 }
 
-Vector3 Object::normal(const Vector3& point) const
+Vector3 Object::normal_at(const Vector3& point) const
 {
     return transformed_shape()->normal(point);
 }
 
-std::optional<double> Object::closest_intersection(const Line3& line) const
+std::vector<Hit> Object::intersects(const Line3& line) const
 {
-    return transformed_shape()->closest_intersection(line);
+    std::vector<Hit> hits = transformed_shape()->intersects(line);
+    for (Hit& hit : hits) {
+        hit.object = this;
+    }
+    return hits;
 }
 
-void Object::apply_transform(const Matrix4& transform)
+std::optional<Hit> Object::closest_intersection(const Line3& line) const
 {
-    transform_ = transform_ * transform;
+    std::optional<Hit> hit = transformed_shape()->closest_intersection(line);
+    if (hit) {
+        hit->object = this;
+    }
+    return hit;
+}
+
+const Shape* Object::transformed_shape() const
+{
+    if (transformed_shape_dirty_) {
+        transform_shape();
+        transformed_shape_dirty_ = false;
+    }
+    return transformed_shape_.get();
 }

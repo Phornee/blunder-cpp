@@ -8,7 +8,10 @@ Camera::Camera(
     : position(position_value),
       sensor_size(sensor_size_value),
       focal_length(focal_length_value),
-      view_direction_(view_direction.normalized())
+      view_direction_(view_direction.normalized()),
+      sensor_u_(Vector3::zero),
+      sensor_v_(Vector3::zero),
+      sensor_center_(Vector3::zero)
 {
     update_sensor();
 }

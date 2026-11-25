@@ -1,16 +1,21 @@
 #include <blunder/primitives/mesh_object.hpp>
 
+#include <blunder/aabb.hpp>
+
+#include <algorithm>
 #include <array>
 #include <cctype>
 #include <cmath>
 #include <cstdlib>
 #include <fstream>
+#include <filesystem>
 #include <memory>
+#include <sstream>
 #include <stdexcept>
+#include <unordered_map>
 #include <utility>
 
 #include <geom3/line3.hpp>
-#include <geom3/triangle3.hpp>
 
 namespace {
 std::string trim(const std::string& text)
@@ -124,9 +129,9 @@ std::size_t point_index(const std::string& text)
     return parsed;
 }
 
-std::vector<std::vector<double>> parse_points(const std::vector<std::string>& lines)
+std::vector<Vector3> parse_points(const std::vector<std::string>& lines)
 {
-    std::vector<std::vector<double>> points;
+    std::vector<Vector3> points;
     bool in_section = false;
 
     for (std::string raw : lines) {
@@ -155,7 +160,7 @@ std::vector<std::vector<double>> parse_points(const std::vector<std::string>& li
 
             std::vector<double> point;
             if (parse_inline_numbers(data, point) && point.size() >= 3) {
-                points.push_back({point[0], point[1], point[2]});
+                points.emplace_back(point[0], point[1], point[2]);
             }
         }
     }
@@ -189,9 +194,181 @@ std::vector<std::array<std::size_t, 3>> parse_faces(const std::vector<std::strin
     }
     return faces;
 }
+
+struct ParsedMesh
+{
+    std::vector<Vector3> points;
+    std::vector<std::array<std::size_t, 3>> faces;
+};
+
+std::size_t obj_vertex_index(
+    const std::string& reference,
+    std::size_t vertex_count,
+    std::size_t line_number)
+{
+    const std::size_t slash = reference.find('/');
+    const std::string index_text = reference.substr(0, slash);
+    long long index = 0;
+    std::size_t parsed_length = 0;
+    try {
+        index = std::stoll(index_text, &parsed_length);
+    } catch (const std::invalid_argument&) {
+        throw std::invalid_argument(
+            "Invalid OBJ vertex index at line " + std::to_string(line_number));
+    } catch (const std::out_of_range&) {
+        throw std::invalid_argument(
+            "OBJ vertex index is out of range at line " + std::to_string(line_number));
+    }
+
+    if (parsed_length != index_text.size() || index == 0) {
+        throw std::invalid_argument(
+            "Invalid OBJ vertex index at line " + std::to_string(line_number));
+    }
+
+    const long long count = static_cast<long long>(vertex_count);
+    const long long resolved_index = index > 0 ? index - 1 : count + index;
+    if (resolved_index < 0 || resolved_index >= count) {
+        throw std::invalid_argument(
+            "OBJ vertex index is out of range at line " + std::to_string(line_number));
+    }
+    return static_cast<std::size_t>(resolved_index);
+}
+
+ParsedMesh parse_obj(const std::vector<std::string>& lines)
+{
+    ParsedMesh mesh;
+
+    for (std::size_t line_index = 0; line_index < lines.size(); ++line_index) {
+        std::string raw = lines[line_index];
+        strip_comment(raw);
+        std::istringstream input(raw);
+        std::string directive;
+        input >> directive;
+
+        if (directive == "v") {
+            double x = 0.0;
+            double y = 0.0;
+            double z = 0.0;
+            if (!(input >> x >> y >> z)) {
+                throw std::invalid_argument(
+                    "Invalid OBJ vertex at line " + std::to_string(line_index + 1));
+            }
+            mesh.points.emplace_back(x, y, z);
+        } else if (directive == "f") {
+            std::vector<std::size_t> face;
+            std::string reference;
+            while (input >> reference) {
+                face.push_back(
+                    obj_vertex_index(reference, mesh.points.size(), line_index + 1));
+            }
+
+            if (face.size() < 3) {
+                throw std::invalid_argument(
+                    "OBJ face has fewer than three vertices at line "
+                    + std::to_string(line_index + 1));
+            }
+            for (std::size_t i = 1; i + 1 < face.size(); ++i) {
+                mesh.faces.push_back({face[0], face[i], face[i + 1]});
+            }
+        }
+    }
+
+    if (mesh.points.empty() || mesh.faces.empty()) {
+        throw std::invalid_argument("OBJ mesh must contain vertices and faces");
+    }
+    return mesh;
+}
 }
 
 namespace {
+struct Vertex
+{
+    explicit Vertex(const Vector3& position)
+        : position(position)
+    {
+    }
+
+    Vector3 position;
+};
+
+class MeshTriangle
+{
+public:
+    MeshTriangle(Vertex& a, Vertex& b, Vertex& c)
+        : a_(&a),
+          b_(&b),
+          c_(&c),
+          ab_(b.position - a.position),
+          ac_(c.position - a.position),
+          d00_(ab_.dot(ab_)),
+          d01_(ab_.dot(ac_)),
+          d11_(ac_.dot(ac_)),
+          denom_(d00_ * d11_ - d01_ * d01_),
+          normal_{0.0, 0.0, 0.0}
+    {
+        const Vector3 cross = ab_.cross(ac_);
+        if (cross.is_zero()) {
+            throw std::invalid_argument("A triangle must have three non-collinear vertices");
+        }
+        normal_ = cross.normalized();
+    }
+
+    const Vertex& a() const { return *a_; }
+    const Vertex& b() const { return *b_; }
+    const Vertex& c() const { return *c_; }
+
+    Vector3 barycentric(const Vector3& point) const
+    {
+        const Vector3 ap = point - a_->position;
+        const double d20 = ap.dot(ab_);
+        const double d21 = ap.dot(ac_);
+        const double bar_b = (d11_ * d20 - d01_ * d21) / denom_;
+        const double bar_c = (d00_ * d21 - d01_ * d20) / denom_;
+        return {1.0 - bar_b - bar_c, bar_b, bar_c};
+    }
+
+    bool contains(const Vector3& point) const
+    {
+        return std::abs(normal_.dot(point - a_->position)) <= epsilon
+            && is_inside(barycentric(point));
+    }
+
+    Vector3 normal() const
+    {
+        return normal_;
+    }
+
+    std::optional<Hit> closest_intersection(const Line3& line) const
+    {
+        const double denominator = normal_.dot(line.v);
+        if (std::abs(denominator) < epsilon) {
+            return std::nullopt;
+        }
+
+        const double lambda = normal_.dot(a_->position - line.a) / denominator;
+        const Vector3 point = line.calc_point(lambda);
+        const Vector3 coordinates = barycentric(point);
+        if (coordinates.x < 0.0 || coordinates.x > 1.0
+            || coordinates.y < 0.0 || coordinates.y > 1.0
+            || coordinates.z < 0.0 || coordinates.z > 1.0) {
+            return std::nullopt;
+        }
+        return Hit{lambda, nullptr, normal_, coordinates};
+    }
+
+private:
+    Vertex* a_;
+    Vertex* b_;
+    Vertex* c_;
+    Vector3 ab_;
+    Vector3 ac_;
+    double d00_;
+    double d01_;
+    double d11_;
+    double denom_;
+    Vector3 normal_;
+};
+
 class MeshShape final : public Shape
 {
 public:
@@ -208,89 +385,137 @@ public:
             lines.push_back(line);
         }
 
-        const std::vector<std::vector<double>> points = parse_points(lines);
-        const std::vector<std::array<std::size_t, 3>> faces = parse_faces(lines);
+        std::vector<Vector3> points;
+        std::vector<std::array<std::size_t, 3>> faces;
+        std::string extension = std::filesystem::path(file).extension().string();
+        std::transform(
+            extension.begin(),
+            extension.end(),
+            extension.begin(),
+            [](unsigned char character) {
+                return static_cast<char>(std::tolower(character));
+            });
+        if (extension == ".obj") {
+            ParsedMesh mesh = parse_obj(lines);
+            points = std::move(mesh.points);
+            faces = std::move(mesh.faces);
+        } else {
+            points = parse_points(lines);
+            faces = parse_faces(lines);
+        }
+
+        vertices_.reserve(points.size());
+        for (const Vector3& point : points) {
+            vertices_.push_back(std::make_unique<Vertex>(point));
+        }
 
         for (const auto& face : faces) {
-            if (face[0] >= points.size() || face[1] >= points.size() || face[2] >= points.size()) {
+            if (face[0] >= vertices_.size()
+                || face[1] >= vertices_.size()
+                || face[2] >= vertices_.size()) {
                 continue;
             }
 
             try {
-                triangles.emplace_back(
-                    Vector3(points[face[0]][0], points[face[0]][1], points[face[0]][2]),
-                    Vector3(points[face[1]][0], points[face[1]][1], points[face[1]][2]),
-                    Vector3(points[face[2]][0], points[face[2]][1], points[face[2]][2]));
+                triangles_.emplace_back(
+                    *vertices_[face[0]],
+                    *vertices_[face[1]],
+                    *vertices_[face[2]]);
             } catch (const std::invalid_argument&) {
                 // Skip degenerate triangles.
             }
         }
     }
 
-    explicit MeshShape(std::vector<Triangle3> source)
-        : triangles(std::move(source))
+    MeshShape(
+        std::vector<std::unique_ptr<Vertex>> vertices,
+        std::vector<MeshTriangle> triangles)
+        : vertices_(std::move(vertices)),
+          triangles_(std::move(triangles))
     {
     }
 
-    std::vector<Triangle3> transformed_triangles(const Matrix4& transform) const
+    std::vector<Vector3> vertex_positions() const
     {
-        std::vector<Triangle3> transformed;
-        transformed.reserve(triangles.size());
+        std::vector<Vector3> positions;
+        positions.reserve(vertices_.size());
+        for (const std::unique_ptr<Vertex>& vertex : vertices_) {
+            positions.push_back(vertex->position);
+        }
+        return positions;
+    }
 
-        for (const Triangle3& triangle : triangles) {
+    std::unique_ptr<MeshShape> transformed(const Matrix4& transform) const
+    {
+        std::vector<std::unique_ptr<Vertex>> transformed_vertices;
+        transformed_vertices.reserve(vertices_.size());
+        std::unordered_map<const Vertex*, Vertex*> vertex_map;
+        vertex_map.reserve(vertices_.size());
+
+        for (const std::unique_ptr<Vertex>& vertex : vertices_) {
+            auto transformed_vertex =
+                std::make_unique<Vertex>(transform * vertex->position);
+            vertex_map.emplace(vertex.get(), transformed_vertex.get());
+            transformed_vertices.push_back(std::move(transformed_vertex));
+        }
+transform the normals?
+        std::vector<MeshTriangle> transformed_triangles;
+        transformed_triangles.reserve(triangles_.size());
+        for (const MeshTriangle& triangle : triangles_) {
             try {
-                transformed.emplace_back(
-                    transform * triangle.a,
-                    transform * triangle.b,
-                    transform * triangle.c);
+                transformed_triangles.emplace_back(
+                    *vertex_map.at(&triangle.a()),
+                    *vertex_map.at(&triangle.b()),
+                    *vertex_map.at(&triangle.c()));
             } catch (const std::invalid_argument&) {
                 // Skip triangles that become degenerate after transformation.
             }
         }
-        return transformed;
+
+        return std::make_unique<MeshShape>(
+            std::move(transformed_vertices),
+            std::move(transformed_triangles));
     }
 
     Vector3 barycentric(const Vector3& point) const override
     {
-        for (const Triangle3& triangle : triangles) {
-            const Vector3 result = triangle.barycentric(point);
-            if (is_inside(result)) {
-                return result;
+        for (const MeshTriangle& triangle : triangles_) {
+            if (triangle.contains(point)) {
+                return triangle.barycentric(point);
             }
         }
-        return Vector3{};
+        return Vector3::zero;
     }
 
     Vector3 normal(const Vector3& point) const override
     {
-        for (const Triangle3& triangle : triangles) {
-            if (is_inside(triangle.barycentric(point))) {
-                return triangle.normal(point);
+        for (const MeshTriangle& triangle : triangles_) {
+            if (triangle.contains(point)) {
+                return triangle.normal();
             }
         }
-        return Vector3{};
+        return Vector3::zero;
     }
 
-    std::vector<double> intersects(const Line3& line) const override
+    std::vector<Hit> intersects(const Line3& line) const override
     {
-        std::vector<double> intersections;
-        for (const Triangle3& triangle : triangles) {
-            const std::vector<double> triangle_hits = triangle.intersects(line);
-            for (double lambda : triangle_hits) {
-                if (lambda >= epsilon) {
-                    intersections.push_back(lambda);
-                }
+        std::vector<Hit> intersections;
+        for (const MeshTriangle& triangle : triangles_) {
+            const std::optional<Hit> hit = triangle.closest_intersection(line);
+            if (hit && hit->lambda >= epsilon) {
+                intersections.push_back(*hit);
             }
         }
         return intersections;
     }
 
-    std::optional<double> closest_intersection(const Line3& line) const override
+    std::optional<Hit> closest_intersection(const Line3& line) const override
     {
-        std::optional<double> closest;
-        for (const Triangle3& triangle : triangles) {
-            const std::optional<double> hit = triangle.closest_intersection(line);
-            if (hit && *hit >= epsilon && (!closest || *hit < *closest)) {
+        std::optional<Hit> closest;
+        for (const MeshTriangle& triangle : triangles_) {
+            const std::optional<Hit> hit = triangle.closest_intersection(line);
+            if (hit && hit->lambda >= epsilon
+                && (!closest || hit->lambda < closest->lambda)) {
                 closest = hit;
             }
         }
@@ -298,7 +523,8 @@ public:
     }
 
 private:
-    std::vector<Triangle3> triangles;
+    std::vector<std::unique_ptr<Vertex>> vertices_;
+    std::vector<MeshTriangle> triangles_;
 };
 }
 
@@ -312,6 +538,7 @@ MeshObject::MeshObject(
           std::make_unique<MeshShape>(file)),
       file_(file)
 {
+    transform_shape();
 }
 
 const std::string& MeshObject::filename() const
@@ -326,11 +553,14 @@ void MeshObject::transform_shape() const
         throw std::logic_error("MeshObject must contain a MeshShape");
     }
 
-    transformed_shape_ = std::make_unique<MeshShape>(
-        mesh->transformed_triangles(transform_));
+    std::unique_ptr<MeshShape> transformed_mesh = mesh->transformed(transform_);
+    const std::vector<Vector3> vertices = transformed_mesh->vertex_positions();
+    bounding_box_.emplace(vertices.front(), vertices.front());
+    bounding_box_->set_from_vertices(vertices);
+    transformed_shape_ = std::move(transformed_mesh);
 }
 
-Color MeshObject::color_at(const Vector3& point) const
+Color MeshObject::albedo_at(const Vector3& point) const
 {
     (void)point;
     return material().color();

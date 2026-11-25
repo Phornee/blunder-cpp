@@ -19,6 +19,7 @@ GEOM_HEADERS := $(call rwildcard,../geom3/include/,*.hpp)
 CPPFLAGS := -I$(CURDIR)/include -I$(abspath ../geom3/include)
 SDL_CFLAGS = $(shell $(PKG_CONFIG) --cflags sdl3 sdl3-image)
 SDL_LIBS = $(shell $(PKG_CONFIG) --libs sdl3 sdl3-image)
+SDL_LINK_LIBS := $(filter-out -mwindows,$(SDL_LIBS))
 
 .DEFAULT_GOAL := all
 
@@ -77,8 +78,8 @@ $(LIBRARY): $(GEOM_SOURCES) $(GEOM_HEADERS)
 	$(MAKE) -C ../geom3 CONFIG=$(CONFIG) JOBS=$(JOBS)
 
 # Link the application objects with the geom3 static library.
-$(APP_TARGET): $(OBJECTS) $(LIBRARY) | check-sdl
-	$(CXX) $(CXXFLAGS) $(OBJECTS) $(LIBRARY) $(SDL_LIBS) -o $@
+$(APP_TARGET): $(OBJECTS) $(LIBRARY) Makefile | check-sdl
+	$(CXX) $(CXXFLAGS) $(OBJECTS) $(LIBRARY) $(SDL_LINK_LIBS) -o $@
 
 # Compile each source into the build directory; changes to public headers rebuild it.
 $(BUILD_DIR)/%.o: src/%.cpp $(HEADERS) | check-sdl
@@ -90,8 +91,8 @@ $(TEST_OBJECT): tests/test.cpp $(HEADERS) | check-sdl
 	$(MKDIR)
 	$(CXX) $(CPPFLAGS) $(SDL_CFLAGS) $(CXXFLAGS) -c $< -o $@
 
-$(TEST_TARGET): $(TEST_OBJECT) $(filter-out $(BUILD_DIR)/app.o $(BUILD_DIR)/mini_font.o,$(OBJECTS)) $(LIBRARY)
-	$(CXX) $(CXXFLAGS) $(TEST_OBJECT) $(filter-out $(BUILD_DIR)/app.o $(BUILD_DIR)/mini_font.o,$(OBJECTS)) $(LIBRARY) $(SDL_LIBS) -o $@
+$(TEST_TARGET): $(TEST_OBJECT) $(filter-out $(BUILD_DIR)/app.o $(BUILD_DIR)/mini_font.o,$(OBJECTS)) $(LIBRARY) Makefile
+	$(CXX) $(CXXFLAGS) $(TEST_OBJECT) $(filter-out $(BUILD_DIR)/app.o $(BUILD_DIR)/mini_font.o,$(OBJECTS)) $(LIBRARY) $(SDL_LINK_LIBS) -o $@
 
 # Convenience target for a debug build.
 debug:

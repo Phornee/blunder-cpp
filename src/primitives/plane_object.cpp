@@ -12,28 +12,24 @@ PlaneObject::PlaneObject(
     : Object(
           std::move(name),
           material,
-          std::make_unique<Plane>(point, normal))
+          std::make_unique<Plane>(Vector3::zero, normal))
 {
+    transform_ = Matrix4::translation(point);
+    transform_shape();
+    bounding_box_ = std::nullopt;
 }
 
 void PlaneObject::transform_shape() const
 {
     Plane* plane = dynamic_cast<Plane*>(shape_.get());
     Vector3 transformed_point = transform_ * plane->a;
-    Vector3 transformed_normal = (transform_ * (plane->a + plane->n)) - transformed_point;
-
-    if (transformed_shape_ == nullptr) {
-        transformed_shape_ = std::make_unique<Plane>(transformed_point, transformed_normal);
-    }
-    else
-    {
-        static_cast<Plane*>(transformed_shape_.get())->a = transformed_point;
-        static_cast<Plane*>(transformed_shape_.get())->n = transformed_normal;
-    }
+    Vector3 transformed_normal = transform_.transform_direction(plane->n);
+    transformed_shape_ = std::make_unique<Plane>(transformed_point, transformed_normal);
 }
 
-Color PlaneObject::color_at(const Vector3& point) const
+Color PlaneObject::albedo_at(const Vector3& point) const
 {
-    const std::optional<Vector2> coordinates = shape_->texture_coordinates(point, 0.1);
-    return coordinates ? material_.get().color_at(*coordinates) : material_.get().color();
+    const std::optional<Vector2> coordinates =
+        transformed_shape()->texture_coordinates(point, 0.1);
+    return coordinates ? material_.get().albedo_at(*coordinates) : material_.get().color();
 }
