@@ -15,13 +15,13 @@ Scene::Scene()
 {
     Material& red_mat = add_material("Red", Color{0.9, 0.5, 0.5}, 0.5);
     Material& blue_mat = add_material("Blue", Color{0.5, 0.5, 0.9}, 0.5);
-    Material& green_mat = add_material("Green", Color{0.2, 0.9, 0.2}, 0.0);
+    Material& green_mat = add_material("Green", Color{0.2, 0.9, 0.2}, 0.5);
     Material& yellow_mat = add_material("Yellow", Color{0.9, 0.8, 0.2}, 0.1, std::make_unique<Texture>("assets/beige-limestone-tiles-2k.jpg"));
     Material& white_mat = add_material("White", Color{0.9, 0.9, 0.9}, 0.1, std::make_unique<Texture>("assets/beige-limestone-tiles-2k.jpg"));
 
     lights.push_back(std::make_unique<AmbientLight>("Omnilight", Color{0.0, 0.0, 0.2}));
-    lights.push_back(std::make_unique<PointLight>("WhiteLight", Color{1.0, 1.0, 1.0}, Vector3{-3.5, 0.0, 2.0}));
-    lights.push_back(std::make_unique<PointLight>("RedLight", Color{1.0, 0.7, 0.7}, Vector3{3.5, 4.0, -2.0}));
+    lights.push_back(std::make_unique<PointLight>("WhiteLight", Color{1.0, 1.0, 1.0}, Vector3{-3.5, 0.0, 2.0}, 0.5));
+    lights.push_back(std::make_unique<PointLight>("RedLight", Color{1.0, 0.7, 0.7}, Vector3{3.5, 4.0, -2.0}, 0.5));
     objects.push_back(std::make_unique<SphereObject>("RedSphere", red_mat, Vector3{0.0, 0.0, -5.0}, 3.0));
     objects.push_back(std::make_unique<SphereObject>("LeftSphere", blue_mat, Vector3{3.0, 2.0, 0.0}, 0.5));
     objects.push_back(std::make_unique<SphereObject>("RightSphere", green_mat, Vector3{-2.0, 1.0, 5.0}, 0.5));
@@ -78,14 +78,14 @@ std::optional<Hit> Scene::closest_hit(const Line3& ray) const
     double closest_lambda = std::numeric_limits<double>::max();
     for (const std::unique_ptr<Object>& object : objects)
     {
-        if (!object->bounding_box() || object->bounding_box()->intersects(ray)) {
+        //if (!object->bounding_box() || object->bounding_box()->intersects(ray)) {
             const std::optional<Hit> intersection = object->closest_intersection(ray);
             if (intersection && intersection->lambda > epsilon && intersection->lambda < closest_lambda)
             {
                 closest_lambda = intersection->lambda;
                 closest = intersection;
             }
-        }
+        //}
     }
     return closest;
 }

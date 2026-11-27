@@ -26,7 +26,7 @@ const Material& Object::material() const
 //     return material_.get().color();
 // }
 
-Color Object::albedo_at(const Vector3& point) const
+Color Object::albedo_at(const Vector3&) const
 {
     return Color(1.0, 0.0, 1.0);
 }

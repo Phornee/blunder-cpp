@@ -39,7 +39,7 @@ public:
     /// Provides read-only access to the rendered pixel grid.
     /// @return The fixed-size RGBA pixel grid owned by this instance.
     const PixelGrid&    GetPixelGrid() const;
-
+    Vector2             screen_coords_to_camera(int x, int y) const;
 private:
     Color light_contribution(
         const Color& surface_color,
@@ -47,7 +47,6 @@ private:
         const Vector3& hit_point,
         const Vector3& normal) const;
 
-    Vector2             screen_coords_to_camera(int x, int y) const;
     Color               get_incomming_light(const Scene& scene, const Line3& ray);
     Color               trace_ray(const Scene& scene, const Line3& ray, int depth);
 

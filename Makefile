@@ -41,11 +41,11 @@ endif
 ifeq ($(CONFIG),debug)
   BUILD_DIR := build/debug
   APP_TARGET ?= $(BUILD_DIR)/Blunder.exe
-  CXXFLAGS := -std=c++20 -Wall -Wextra -O0 -g
+  CXXFLAGS := -std=c++20 -Wall -Wextra -O0 -g -gdwarf-4 -fno-omit-frame-pointer
 else
   BUILD_DIR := build/release
   APP_TARGET ?= $(BUILD_DIR)/Blunder.exe
-  CXXFLAGS := -std=c++20 -Wall -Wextra -O2
+  CXXFLAGS := -std=c++20 -Wall -Wextra -O2 -g -gdwarf-4 -fno-omit-frame-pointer
 endif
 
 LIBRARY := ../geom3/build/$(CONFIG)/libgeom3.a

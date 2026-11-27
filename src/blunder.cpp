@@ -23,23 +23,53 @@
 
 namespace
 {
-    // constexpr int SamplesPerPixel = 20;
-    // constexpr double RayDirectionStandardDeviation = 0.001;
-    // constexpr int DepthLimit = 2;
+    constexpr int SamplesPerPixel = 20;
+    constexpr int ShadowSamplesPerLight = 16;
+    constexpr double RayDirectionStandardDeviation = 0.001;
+    constexpr int DepthLimit = 2;
 
-    constexpr int SamplesPerPixel = 1; // 50
-    constexpr double RayDirectionStandardDeviation = 0; // 0.001
-    constexpr int DepthLimit = 0; // 10
+    // constexpr int SamplesPerPixel = 1; // 50
+    // constexpr double RayDirectionStandardDeviation = 0; // 0.001
+    // constexpr int DepthLimit = 0; // 10
 
-    double shadow_attenuation(const Scene &scene, const Line3 &ray) {
-        // TODO: This is a very naive shadow attenuation implementation. It should be improved to support multiple light sources and partial occlusion.
-        for (const std::unique_ptr<Object> &object : scene.objects) {
-            const std::optional<Hit> hit = object->closest_intersection(ray);
-            if (hit && hit->lambda > 0.0 && hit->lambda < 1.0 && ray.a.distance(ray.calc_point(hit->lambda)) > 0.001){
-                return 1.0;
+    Vector3 random_unit_vector()
+    {
+        constexpr double Pi = 3.14159265358979323846;
+        thread_local std::mt19937 random_engine(std::random_device{}());
+        std::uniform_real_distribution<double> unit_distribution(0.0, 1.0);
+        const double z = 1.0 - 2.0 * unit_distribution(random_engine);
+        const double azimuth = 2.0 * Pi * unit_distribution(random_engine);
+        const double radial = std::sqrt(1.0 - z * z);
+        return {radial * std::cos(azimuth), radial * std::sin(azimuth), z};
+    }
+
+    double shadow_attenuation(const Scene &scene, const Light& light, const Vector3& hit_point) {
+        const Vector3 direction_to_light = light.direction_to_light(hit_point);
+        const auto ray_attenuation = [&scene, &hit_point](const Line3& ray) {
+            for (const std::unique_ptr<Object>& object : scene.objects) {
+                const std::optional<Hit> hit = object->closest_intersection(ray);
+                if (hit && hit->lambda > 0.0 && hit->lambda < 1.0 &&
+                    hit_point.distance(ray.calc_point(hit->lambda)) > 0.001) {
+                    return 1.0;
+                }
             }
+            return 0.0;
+        };
+
+        const PointLight* point_light = dynamic_cast<const PointLight*>(&light);
+        if (point_light && point_light->radius() > 0.0) {
+            const Vector3 light_position = hit_point + direction_to_light;
+            double attenuation = 0.0;
+            for (int sample = 0; sample < ShadowSamplesPerLight; ++sample) {
+                const Vector3 sample_position =
+                    light_position + random_unit_vector() * point_light->radius();
+                const Line3 shadow_ray{hit_point, sample_position};
+                attenuation += ray_attenuation(shadow_ray);
+            }
+            return attenuation / ShadowSamplesPerLight;
         }
-        return 0.0;
+
+        return ray_attenuation(Line3{hit_point, hit_point + direction_to_light});
     }
 
     std::uint8_t to_channel(double value) {
@@ -69,8 +99,7 @@ Color Blunder::light_contribution(
 
     double shadow_factor = 0.0;
     if (light.can_be_eclipsed()) {
-        const Line3 shadow_ray{hit_point, hit_point + direction_to_light};
-        shadow_factor = shadow_attenuation(*scene_, shadow_ray);
+        shadow_factor = shadow_attenuation(*scene_, light, hit_point);
     }
 
     Color contribution = surface_color * light.color() * (intensity * (1.0 - shadow_factor));
@@ -91,6 +120,8 @@ void Blunder::RenderImage()
 {
     {
         const ScopedLogTimer timer("transform_objects");
+        // Need to transform objects BEFORE rendering, otherwise the multithreading will cause race conditions when 
+        // accessing the transformed shapes.
         scene_->transform_objects();
     }
 
@@ -108,6 +139,7 @@ void Blunder::RenderImage()
         const std::size_t worker_count = std::min<std::size_t>(
             PixelHeight,
             reported_worker_count == 0 ? 1 : reported_worker_count);
+        // std::size_t worker_count = 1;
         const auto render_lines = [this, &line_queue, &queue_mutex, &completed_lines, &render_exception]() {
             while (true) {
                 int y = 0;
@@ -231,7 +263,7 @@ Color Blunder::trace_ray(const Scene &scene, const Line3 &ray, int depth)
 
 Vector2 Blunder::screen_coords_to_camera(int x, int y) const
 {
-    const Vector2 pixel_center{static_cast<double>(x) + 0.5, static_cast<double>(y) + 0.5};
+    const Vector2 pixel_center{static_cast<double>(x) + 0.5, static_cast<double>(PixelHeight - y - 1) + 0.5};
     return {
         pixel_center.x / PixelWidth - 0.5,
         pixel_center.y / PixelHeight - 0.5};
@@ -245,7 +277,7 @@ std::optional<Hit> Blunder::get_hit_info(int x, int y) const
     }
 
     const Camera& camera = scene_->camera;
-    const Vector2 camera_coords = screen_coords_to_camera(x, PixelHeight - y - 1);
+    const Vector2 camera_coords = screen_coords_to_camera(x, y);
     const Vector3 pixel_world_position = camera.camera_coords_to_world(camera_coords);
     const Line3 ray{camera.position, pixel_world_position};
     return scene_->closest_hit(ray);
@@ -263,7 +295,7 @@ void Blunder::RenderPixel(int x, int y)
     const Vector3 pixel_world_position = camera.camera_coords_to_world(camera_coords);
     const Line3 ray{camera.position, pixel_world_position};
     const Color final_color = this->get_incomming_light(*scene_, ray);
-    pixels_[PixelHeight - y - 1][x] = SDL_Color{
+    pixels_[y][x] = SDL_Color{
         to_channel(final_color.r()),
         to_channel(final_color.g()),
         to_channel(final_color.b()),

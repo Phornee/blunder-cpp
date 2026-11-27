@@ -41,15 +41,17 @@ private:
 class PointLight final : public Light
 {
 public:
-                PointLight(std::string name, Color color, Vector3 position);
+                PointLight(std::string name, Color color, Vector3 position, double radius = 0.0);
 
     double      intensity(const Vector3& hit_point, const Vector3& normal) const override;
     bool        can_be_eclipsed() const override;
     Vector3     direction_to_light(const Vector3& hit_point) const override;
     bool        is_specular() const override;
+    double      radius() const;
 
 private:
     Vector3 position_;
+    double radius_;
 };
 
 class AmbientLight final : public Light

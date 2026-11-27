@@ -47,8 +47,8 @@ bool DirectionalLight::is_specular() const
     return true;
 }
 ///////////////////////////////////////////////////////////////////////////////////////////////////
-PointLight::PointLight(std::string name, Color color, Vector3 position)
-    : Light(std::move(name), color), position_(position)
+PointLight::PointLight(std::string name, Color color, Vector3 position, double radius)
+    : Light(std::move(name), color), position_(position), radius_(radius)
 {
 }
 
@@ -72,6 +72,11 @@ Vector3 PointLight::direction_to_light(const Vector3& hit_point) const
 bool PointLight::is_specular() const
 {
     return true;
+}
+
+double PointLight::radius() const
+{
+    return radius_;
 }
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 AmbientLight::AmbientLight(std::string name, Color color)

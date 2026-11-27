@@ -1,6 +1,9 @@
 #include <blunder/primitives/mesh_object.hpp>
 
 #include <blunder/aabb.hpp>
+#include <blunder/octree.hpp>
+#include <blunder/utils/scoped_log_timer.hpp>
+#include <blunder/utils/string.hpp>
 
 #include <algorithm>
 #include <array>
@@ -9,11 +12,13 @@
 #include <cstdlib>
 #include <fstream>
 #include <filesystem>
+#include <istream>
 #include <memory>
 #include <sstream>
 #include <stdexcept>
 #include <unordered_map>
 #include <utility>
+#include <vector>
 
 #include <geom3/line3.hpp>
 
@@ -129,12 +134,13 @@ std::size_t point_index(const std::string& text)
     return parsed;
 }
 
-std::vector<Vector3> parse_points(const std::vector<std::string>& lines)
+std::vector<Vector3> parse_points(std::istream& input)
 {
     std::vector<Vector3> points;
     bool in_section = false;
 
-    for (std::string raw : lines) {
+    std::string raw;
+    while (std::getline(input, raw)) {
         strip_comment(raw);
         const std::string line = trim(raw);
         if (line.empty()) {
@@ -167,12 +173,13 @@ std::vector<Vector3> parse_points(const std::vector<std::string>& lines)
     return points;
 }
 
-std::vector<std::array<std::size_t, 3>> parse_faces(const std::vector<std::string>& lines)
+std::vector<std::array<std::size_t, 3>> parse_faces(std::istream& input)
 {
     std::vector<std::array<std::size_t, 3>> faces;
     bool in_section = false;
 
-    for (std::string raw : lines) {
+    std::string raw;
+    while (std::getline(input, raw)) {
         strip_comment(raw);
         const std::string line = trim(raw);
         if (line.empty()) {
@@ -234,38 +241,40 @@ std::size_t obj_vertex_index(
     return static_cast<std::size_t>(resolved_index);
 }
 
-ParsedMesh parse_obj(const std::vector<std::string>& lines)
+ParsedMesh parse_obj(std::istream& stream)
 {
     ParsedMesh mesh;
 
-    for (std::size_t line_index = 0; line_index < lines.size(); ++line_index) {
-        std::string raw = lines[line_index];
+    std::string raw;
+    std::size_t line_number = 0;
+    while (std::getline(stream, raw)) {
+        ++line_number;
         strip_comment(raw);
-        std::istringstream input(raw);
+        std::istringstream line_input(raw);
         std::string directive;
-        input >> directive;
+        line_input >> directive;
 
         if (directive == "v") {
             double x = 0.0;
             double y = 0.0;
             double z = 0.0;
-            if (!(input >> x >> y >> z)) {
+            if (!(line_input >> x >> y >> z)) {
                 throw std::invalid_argument(
-                    "Invalid OBJ vertex at line " + std::to_string(line_index + 1));
+                    "Invalid OBJ vertex at line " + std::to_string(line_number));
             }
             mesh.points.emplace_back(x, y, z);
         } else if (directive == "f") {
             std::vector<std::size_t> face;
             std::string reference;
-            while (input >> reference) {
+            while (line_input >> reference) {
                 face.push_back(
-                    obj_vertex_index(reference, mesh.points.size(), line_index + 1));
+                    obj_vertex_index(reference, mesh.points.size(), line_number));
             }
 
             if (face.size() < 3) {
                 throw std::invalid_argument(
                     "OBJ face has fewer than three vertices at line "
-                    + std::to_string(line_index + 1));
+                    + std::to_string(line_number));
             }
             for (std::size_t i = 1; i + 1 < face.size(); ++i) {
                 mesh.faces.push_back({face[0], face[i], face[i + 1]});
@@ -304,13 +313,23 @@ public:
           d01_(ab_.dot(ac_)),
           d11_(ac_.dot(ac_)),
           denom_(d00_ * d11_ - d01_ * d01_),
-          normal_{0.0, 0.0, 0.0}
+          normal_{0.0, 0.0, 0.0},
+          bounds_(a.position, a.position)
     {
         const Vector3 cross = ab_.cross(ac_);
         if (cross.is_zero()) {
             throw std::invalid_argument("A triangle must have three non-collinear vertices");
         }
         normal_ = cross.normalized();
+        bounds_.set_bounds(
+            Vector3(
+                std::min({a.position.x, b.position.x, c.position.x}),
+                std::min({a.position.y, b.position.y, c.position.y}),
+                std::min({a.position.z, b.position.z, c.position.z})),
+            Vector3(
+                std::max({a.position.x, b.position.x, c.position.x}),
+                std::max({a.position.y, b.position.y, c.position.y}),
+                std::max({a.position.z, b.position.z, c.position.z})));
     }
 
     const Vertex& a() const { return *a_; }
@@ -336,6 +355,11 @@ public:
     Vector3 normal() const
     {
         return normal_;
+    }
+
+    const AABB& bounds() const
+    {
+        return bounds_;
     }
 
     std::optional<Hit> closest_intersection(const Line3& line) const
@@ -367,6 +391,7 @@ private:
     double d11_;
     double denom_;
     Vector3 normal_;
+    AABB bounds_;
 };
 
 class MeshShape final : public Shape
@@ -374,55 +399,52 @@ class MeshShape final : public Shape
 public:
     explicit MeshShape(const std::string& file)
     {
-        std::ifstream stream(file);
-        if (!stream) {
-            throw std::runtime_error("Unable to open mesh file: " + file);
-        }
-
-        std::vector<std::string> lines;
-        std::string line;
-        while (std::getline(stream, line)) {
-            lines.push_back(line);
-        }
-
-        std::vector<Vector3> points;
-        std::vector<std::array<std::size_t, 3>> faces;
-        std::string extension = std::filesystem::path(file).extension().string();
-        std::transform(
-            extension.begin(),
-            extension.end(),
-            extension.begin(),
-            [](unsigned char character) {
-                return static_cast<char>(std::tolower(character));
-            });
-        if (extension == ".obj") {
-            ParsedMesh mesh = parse_obj(lines);
-            points = std::move(mesh.points);
-            faces = std::move(mesh.faces);
-        } else {
-            points = parse_points(lines);
-            faces = parse_faces(lines);
-        }
-
-        vertices_.reserve(points.size());
-        for (const Vector3& point : points) {
-            vertices_.push_back(std::make_unique<Vertex>(point));
-        }
-
-        for (const auto& face : faces) {
-            if (face[0] >= vertices_.size()
-                || face[1] >= vertices_.size()
-                || face[2] >= vertices_.size()) {
-                continue;
+        {
+            const ScopedLogTimer timer("Model loading and parsing");
+            std::ifstream stream(file);
+            if (!stream) {
+                throw std::runtime_error("Unable to open mesh file: " + file);
             }
 
-            try {
-                triangles_.emplace_back(
-                    *vertices_[face[0]],
-                    *vertices_[face[1]],
-                    *vertices_[face[2]]);
-            } catch (const std::invalid_argument&) {
-                // Skip degenerate triangles.
+            std::vector<Vector3> points;
+            std::vector<std::array<std::size_t, 3>> faces;
+            std::string extension = std::filesystem::path(file).extension().string();
+            extension = to_lower(extension);
+
+            if (extension == ".obj") {
+                ParsedMesh mesh = parse_obj(stream);
+                points = std::move(mesh.points);
+                faces = std::move(mesh.faces);
+            } else {
+                points = parse_points(stream);
+                stream.clear();
+                stream.seekg(0);
+                if (!stream) {
+                    throw std::runtime_error("Unable to rewind mesh file: " + file);
+                }
+                faces = parse_faces(stream);
+            }
+
+            vertices_.reserve(points.size());
+            for (const Vector3& point : points) {
+                vertices_.push_back(std::make_unique<Vertex>(point));
+            }
+
+            for (const auto& face : faces) {
+                if (face[0] >= vertices_.size()
+                    || face[1] >= vertices_.size()
+                    || face[2] >= vertices_.size()) {
+                    continue;
+                }
+
+                try {
+                    triangles_.emplace_back(
+                        *vertices_[face[0]],
+                        *vertices_[face[1]],
+                        *vertices_[face[2]]);
+                } catch (const std::invalid_argument&) {
+                    // Skip degenerate triangles.
+                }
             }
         }
     }
@@ -433,6 +455,8 @@ public:
         : vertices_(std::move(vertices)),
           triangles_(std::move(triangles))
     {
+        const ScopedLogTimer timer("Octree building 2");
+        build_octree();
     }
 
     std::vector<Vector3> vertex_positions() const
@@ -458,7 +482,7 @@ public:
             vertex_map.emplace(vertex.get(), transformed_vertex.get());
             transformed_vertices.push_back(std::move(transformed_vertex));
         }
-transform the normals?
+        //TODO: transform the normals?
         std::vector<MeshTriangle> transformed_triangles;
         transformed_triangles.reserve(triangles_.size());
         for (const MeshTriangle& triangle : triangles_) {
@@ -477,30 +501,16 @@ transform the normals?
             std::move(transformed_triangles));
     }
 
-    Vector3 barycentric(const Vector3& point) const override
+    Vector3 normal(const Vector3&) const override
     {
-        for (const MeshTriangle& triangle : triangles_) {
-            if (triangle.contains(point)) {
-                return triangle.barycentric(point);
-            }
-        }
-        return Vector3::zero;
-    }
-
-    Vector3 normal(const Vector3& point) const override
-    {
-        for (const MeshTriangle& triangle : triangles_) {
-            if (triangle.contains(point)) {
-                return triangle.normal();
-            }
-        }
         return Vector3::zero;
     }
 
     std::vector<Hit> intersects(const Line3& line) const override
     {
         std::vector<Hit> intersections;
-        for (const MeshTriangle& triangle : triangles_) {
+        for (const std::size_t index : octree_->ray_candidates(line)) {
+            const MeshTriangle& triangle = triangles_[index];
             const std::optional<Hit> hit = triangle.closest_intersection(line);
             if (hit && hit->lambda >= epsilon) {
                 intersections.push_back(*hit);
@@ -512,7 +522,8 @@ transform the normals?
     std::optional<Hit> closest_intersection(const Line3& line) const override
     {
         std::optional<Hit> closest;
-        for (const MeshTriangle& triangle : triangles_) {
+        for (const std::size_t index : octree_->ray_candidates(line)) {
+            const MeshTriangle& triangle = triangles_[index];
             const std::optional<Hit> hit = triangle.closest_intersection(line);
             if (hit && hit->lambda >= epsilon
                 && (!closest || hit->lambda < closest->lambda)) {
@@ -523,8 +534,19 @@ transform the normals?
     }
 
 private:
+    void build_octree()
+    {
+        std::vector<AABB> triangle_bounds;
+        triangle_bounds.reserve(triangles_.size());
+        for (const MeshTriangle& triangle : triangles_) {
+            triangle_bounds.push_back(triangle.bounds());
+        }
+        octree_ = std::make_unique<MeshOctree>(triangle_bounds);
+    }
+
     std::vector<std::unique_ptr<Vertex>> vertices_;
     std::vector<MeshTriangle> triangles_;
+    std::unique_ptr<MeshOctree> octree_;
 };
 }
 
@@ -538,7 +560,7 @@ MeshObject::MeshObject(
           std::make_unique<MeshShape>(file)),
       file_(file)
 {
-    transform_shape();
+    // transform_shape();
 }
 
 const std::string& MeshObject::filename() const
@@ -555,8 +577,8 @@ void MeshObject::transform_shape() const
 
     std::unique_ptr<MeshShape> transformed_mesh = mesh->transformed(transform_);
     const std::vector<Vector3> vertices = transformed_mesh->vertex_positions();
-    bounding_box_.emplace(vertices.front(), vertices.front());
-    bounding_box_->set_from_vertices(vertices);
+    // bounding_box_.emplace(vertices.front(), vertices.front());
+    // bounding_box_->set_from_vertices(vertices);
     transformed_shape_ = std::move(transformed_mesh);
 }
 

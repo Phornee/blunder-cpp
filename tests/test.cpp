@@ -5,6 +5,7 @@
 #include <stdexcept>
 
 #include <blunder/material.hpp>
+#include <blunder/primitives/mesh_object.hpp>
 #include <blunder/primitives/object.hpp>
 #include <blunder/primitives/plane_object.hpp>
 #include <blunder/primitives/sphere_object.hpp>
@@ -53,6 +54,25 @@ int main()
     assert(triangle_color.r() == shared_material.color().r());
     assert(triangle_color.g() == shared_material.color().g());
     assert(triangle_color.b() == shared_material.color().b());
+
+    const MeshObject octree_mesh("OctreeMesh", shared_material, "assets/toroid.obj");
+    const Vector3 toroid_a{1.0, 0.0, 0.0};
+    const Vector3 toroid_b{0.980785280, 0.195090322, 0.0};
+    const Vector3 toroid_c{0.962120822, 0.191377730, 0.095670858};
+    const Vector3 mesh_hit_point = (toroid_a + toroid_b + toroid_c) * (1.0 / 3.0);
+    const Line3 mesh_ray{
+        mesh_hit_point + Vector3{0.0, 0.0, 1.0},
+        mesh_hit_point - Vector3{0.0, 0.0, 1.0}};
+    const std::vector<Scene::Hit> mesh_hits = octree_mesh.intersects(mesh_ray);
+    assert(!mesh_hits.empty());
+    assert(mesh_hits.front().object == &octree_mesh);
+    assert(octree_mesh.closest_intersection(mesh_ray).has_value());
+    assert(!(octree_mesh.normal_at(mesh_hit_point) == Vector3::zero));
+
+    const MeshObject yaml_mesh("YamlMesh", shared_material, "assets/cubo.yml");
+    assert(yaml_mesh.bounding_box().has_value());
+    assert((yaml_mesh.bounding_box()->minimum() == Vector3{-1.0, -1.0, -1.0}));
+    assert((yaml_mesh.bounding_box()->maximum() == Vector3{1.0, 1.0, 1.0}));
 
     const Scene scene;
     assert(scene.objects[5]->bounding_box().has_value());

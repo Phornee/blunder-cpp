@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <iostream>
 #include <string>
+#include <vector>
 
 #include <SDL3/SDL.h>
 
@@ -23,18 +24,23 @@ bool DrawFpsHud(
     int fps,
     int mouseX,
     int mouseY,
+    Vector2 cameraPos,
     const std::string& objectName,
     const MiniFont& miniFont)
 {
     constexpr int scale = 1;
     constexpr int padding = 8;
-    const std::string fpsText = "FPS: " + std::to_string(fps);
-    const std::string mouseText = "(" + std::to_string(mouseX) + ", " + std::to_string(mouseY) + ")";
-    const std::string objectText = !objectName.empty() ? "Object: " + objectName : "";
-    const int textWidth = std::max({
-        static_cast<int>(fpsText.size()),
-        static_cast<int>(mouseText.size()),
-        static_cast<int>(objectText.size())}) * 6 - 1;
+    const std::vector<std::string> lines = {
+        "FPS: " + std::to_string(fps),
+        "ScreenPos(" + std::to_string(mouseX) + ", " + std::to_string(mouseY) + ")",
+        "CameraPos(" + std::to_string(cameraPos.x) + ", " + std::to_string(cameraPos.y) + ")",
+        !objectName.empty() ? "Object: " + objectName : ""};
+    int widestLine = 0;
+    for (const std::string& line : lines)
+    {
+        widestLine = std::max(widestLine, static_cast<int>(line.size()));
+    }
+    const int textWidth = widestLine * 6 - 1;
     const SDL_FRect background = {
         static_cast<float>(::Blunder::PixelWidth - textWidth - 2 * padding - 12),
         12.0F,
@@ -47,27 +53,21 @@ bool DrawFpsHud(
         return false;
     }
 
-    return miniFont.DrawText(
-        renderer,
-        fpsText,
-        static_cast<int>(background.x) + padding,
-        static_cast<int>(background.y) + padding,
-        scale,
-        {255, 255, 255, 255}) &&
-        miniFont.DrawText(
-            renderer,
-            mouseText,
-            static_cast<int>(background.x) + padding,
-            static_cast<int>(background.y) + padding + 8,
-            scale,
-            {255, 255, 255, 255}) &&
-        miniFont.DrawText(
-            renderer,
-            objectText,
-            static_cast<int>(background.x) + padding,
-            static_cast<int>(background.y) + padding + 16,
-            scale,
-            {255, 255, 255, 255});
+    for (std::size_t lineIndex = 0; lineIndex < lines.size(); ++lineIndex)
+    {
+        if (!miniFont.DrawText(
+                renderer,
+                lines[lineIndex],
+                static_cast<int>(background.x) + padding,
+                static_cast<int>(background.y) + padding + static_cast<int>(lineIndex) * 8,
+                scale,
+                {255, 255, 255, 255}))
+        {
+            return false;
+        }
+    }
+
+    return true;
 }
 
 bool GetMousePixel(SDL_Renderer* renderer, int& x, int& y)
@@ -103,7 +103,7 @@ bool RenderFrame(
     std::string objectName = "")
 {
     const Blunder::PixelGrid& pixels = blunder.GetPixelGrid();
-
+    Vector2 cameraPos = blunder.screen_coords_to_camera(mouseX, mouseY);
     return SDL_UpdateTexture(
             pixelTexture,
             nullptr,
@@ -111,7 +111,7 @@ bool RenderFrame(
             static_cast<int>(sizeof(pixels[0]))) &&
         SDL_RenderClear(renderer) &&
         SDL_RenderTexture(renderer, pixelTexture, nullptr, nullptr) &&
-        DrawFpsHud(renderer, fps, mouseX, mouseY, objectName, miniFont) &&
+        DrawFpsHud(renderer, fps, mouseX, mouseY, cameraPos, objectName, miniFont) &&
         SDL_RenderPresent(renderer);
 }
 }
@@ -190,6 +190,7 @@ int main()
     {
         const ScopedLogTimer timer("RenderImage");
         blunder.RenderImage();
+        // return 1;
     }
 
     bool running = true;
